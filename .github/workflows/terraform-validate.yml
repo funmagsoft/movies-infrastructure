@@ -1,0 +1,45 @@
+name: Terraform Validate
+
+on:
+  pull_request:
+    paths:
+      - 'modules/**'
+      - 'stacks/**'
+      - '.github/workflows/terraform-validate.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'modules/**'
+      - 'stacks/**'
+
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+
+      - name: Terraform Format Check
+        run: |
+          find modules stacks -type f -name "*.tf" -exec terraform fmt -check -diff {} \;
+
+      - name: Check Version Consistency
+        run: |
+          chmod +x scripts/check-versions.sh
+          ./scripts/check-versions.sh
+
+      - name: Terraform Init and Validate
+        run: |
+          chmod +x tests/modules/validate.sh
+          ./tests/modules/validate.sh

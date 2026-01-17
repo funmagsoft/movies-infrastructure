@@ -1,0 +1,100 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    paths:
+      - 'modules/**'
+      - 'stacks/**'
+      - 'env/**'
+      - '.github/workflows/terraform-plan.yml'
+    types: [opened, synchronize, reopened]
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  plan:
+    name: Plan Terraform
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      pull-requests: write
+
+    strategy:
+      matrix:
+        env: [dev, stage]
+        stack:
+          - path: "stacks/10-global/acr"
+            env_type: "global"
+          - path: "stacks/20-platform/core"
+            env_type: "platform"
+          - path: "stacks/20-platform/aks"
+            env_type: "platform"
+          - path: "stacks/20-platform/data"
+            env_type: "platform"
+          - path: "stacks/30-apps/backend"
+            env_type: "apps"
+          - path: "stacks/30-apps/frontend"
+            env_type: "apps"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+          terraform_wrapper: false
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        working-directory: ${{ matrix.stack.path }}
+        run: |
+          ENV_NAME="${{ matrix.env }}"
+          if [ "${{ matrix.stack.env_type }}" == "global" ]; then
+            ENV_NAME="global"
+          fi
+          ../../scripts/tf.sh "$ENV_NAME" "${{ matrix.stack.path }}" init
+
+      - name: Terraform Plan
+        working-directory: ${{ matrix.stack.path }}
+        run: |
+          ENV_NAME="${{ matrix.env }}"
+          if [ "${{ matrix.stack.env_type }}" == "global" ]; then
+            ENV_NAME="global"
+          fi
+          ../../scripts/tf.sh "$ENV_NAME" "${{ matrix.stack.path }}" plan -out=tfplan
+        continue-on-error: true
+
+      - name: Comment PR
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = `${{ matrix.stack.path }}/tfplan`;
+            let planOutput = 'Plan completed';
+            try {
+              if (fs.existsSync(path)) {
+                planOutput = fs.readFileSync(path, 'utf8');
+              }
+            } catch (error) {
+              planOutput = `Error: ${error.message}`;
+            }
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### Plan: ${{ matrix.stack.path }} (${{ matrix.env }})\n\`\`\`\n${planOutput}\n\`\`\``
+            });

@@ -1,0 +1,110 @@
+name: Terraform Apply
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'modules/**'
+      - 'stacks/**'
+      - 'env/**'
+      - '.github/workflows/terraform-apply.yml'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - dev
+          - stage
+          - prod
+      stack:
+        description: 'Stack to deploy'
+        required: true
+        type: choice
+        options:
+          - '10-global/acr'
+          - '20-platform/core'
+          - '20-platform/aks'
+          - '20-platform/data'
+          - '20-platform/observability'
+          - '20-platform/security'
+          - '30-apps/backend'
+          - '30-apps/frontend'
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  apply:
+    name: Apply Terraform
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.6.0"
+          terraform_wrapper: false
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Determine environment and stack
+        id: determine
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "env=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+            echo "stack_path=stacks/${{ github.event.inputs.stack }}" >> $GITHUB_OUTPUT
+            if [[ "${{ github.event.inputs.stack }}" == "10-global/acr" ]]; then
+              echo "env_type=global" >> $GITHUB_OUTPUT
+            else
+              echo "env_type=env" >> $GITHUB_OUTPUT
+            fi
+          else
+            # Auto-detect changed stacks (simplified - would need more logic for production)
+            echo "env=dev" >> $GITHUB_OUTPUT
+            echo "stack_path=stacks/20-platform/core" >> $GITHUB_OUTPUT
+            echo "env_type=env" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Terraform Init
+        working-directory: ${{ steps.determine.outputs.stack_path }}
+        run: |
+          ENV_NAME="${{ steps.determine.outputs.env }}"
+          if [ "${{ steps.determine.outputs.env_type }}" == "global" ]; then
+            ENV_NAME="global"
+          fi
+          ../../scripts/tf.sh "$ENV_NAME" "${{ steps.determine.outputs.stack_path }}" init
+
+      - name: Terraform Plan
+        working-directory: ${{ steps.determine.outputs.stack_path }}
+        run: |
+          ENV_NAME="${{ steps.determine.outputs.env }}"
+          if [ "${{ steps.determine.outputs.env_type }}" == "global" ]; then
+            ENV_NAME="global"
+          fi
+          ../../scripts/tf.sh "$ENV_NAME" "${{ steps.determine.outputs.stack_path }}" plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: ${{ steps.determine.outputs.stack_path }}
+        run: |
+          ENV_NAME="${{ steps.determine.outputs.env }}"
+          if [ "${{ steps.determine.outputs.env_type }}" == "global" ]; then
+            ENV_NAME="global"
+          fi
+          ../../scripts/tf.sh "$ENV_NAME" "${{ steps.determine.outputs.stack_path }}" apply tfplan

@@ -1,0 +1,9 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+!env/**/platform/*.tfvars
+!env/**/apps/*.tfvars
+env/**/backend.hcl
+env/**/backend.auto.tfvars.json
