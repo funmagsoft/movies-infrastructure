@@ -1,12 +1,12 @@
-environment         = "dev"
+environment = "dev"
 # API server allow-list
-authorized_ip_ranges = ["91.150.222.105/32"]
+# Add your current IP to access AKS API server
+# Get your IP: curl -s ifconfig.me
+authorized_ip_ranges = ["91.150.222.105/32", "89.73.196.202/32"]
 
-# Cheapest sensible defaults
-system_node_min = 1
-system_node_max = 2
+# Using Standard_D2s_v3 (2 vCPU, 8GB RAM) - available in polandcentral
+system_node_vm_size = "Standard_D2s_v3"
+system_node_min     = 1
+system_node_max     = 2
 
-# Shared ACR lookup (created by global stack)
-acr_resource_group_name = "rg-fms-movies-shared-plc-01"
-# Acr name is deterministic (constrained). If you changed org/project_short/instance, update here.
-acr_name = "acrfmsmovxplc"  # Placeholder; will be corrected by README guidance
+# ACR is now automatically discovered from global stack remote state

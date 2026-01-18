@@ -34,16 +34,19 @@ locals {
 }
 
 module "kv" {
-  source                    = "../../../modules/azure/keyvault"
-  enabled                   = var.enable_keyvault
-  name                      = local.kv_name
-  resource_group_name       = local.rg_name
-  location                  = var.region
-  tenant_id                 = data.azurerm_client_config.current.tenant_id
-  enable_purge_protection   = var.environment == "prod"
-  enable_private_endpoint   = var.enable_private_endpoints
+  source                     = "../../../modules/azure/keyvault"
+  enabled                    = var.enable_keyvault
+  name                       = local.kv_name
+  resource_group_name        = local.rg_name
+  location                   = var.region
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  enable_purge_protection    = var.environment == "prod"
+  enable_private_endpoint    = var.enable_private_endpoints
   private_endpoint_subnet_id = var.enable_private_endpoints ? data.terraform_remote_state.core.outputs.private_endpoints_subnet_id : ""
-  tags                      = module.std.tags
+  # Enable public access for dev/stage when Private Endpoint is enabled (allows Azure Portal access)
+  # For prod, keep default behavior (public access disabled when Private Endpoint is enabled)
+  public_network_access_enabled = var.enable_private_endpoints && contains(["dev", "stage"], var.environment) ? true : null
+  tags                          = module.std.tags
 }
 
 module "sb" {

@@ -10,7 +10,8 @@ resource "azurerm_key_vault" "this" {
   soft_delete_retention_days = 7
   purge_protection_enabled   = var.enable_purge_protection
 
-  public_network_access_enabled = !var.enable_private_endpoint
+  # If public_network_access_enabled is explicitly set, use it; otherwise default to false when private endpoint is enabled
+  public_network_access_enabled = var.public_network_access_enabled != null ? var.public_network_access_enabled : !var.enable_private_endpoint
 
   tags = var.tags
 

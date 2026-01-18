@@ -64,6 +64,8 @@ module "aks" {
 | `oidc_issuer_url` | URL OIDC issuer (dla Workload Identity) |
 | `kubelet_object_id` | Object ID kubelet identity |
 | `cluster_principal_id` | Principal ID system-assigned identity |
+| `fqdn` | FQDN API servera (bez https://) |
+| `api_server_url` | Pełny URL API servera (z https://) |
 
 ## Uwagi
 

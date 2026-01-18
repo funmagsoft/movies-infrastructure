@@ -25,6 +25,12 @@ variable "system_node_max" {
   default = 2
 }
 
+variable "node_pool_max_surge" {
+  type        = string
+  default     = "1"
+  description = "Maximum number of surge nodes during upgrade. Cannot be '0' when max_unavailable is also '0'. Default '1' allows one surge node during upgrades."
+}
+
 variable "authorized_ip_ranges" {
   type    = list(string)
   default = ["91.150.222.105/32"]

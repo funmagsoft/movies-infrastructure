@@ -1,9 +1,9 @@
 output "resource_group_name" {
-  value = azurerm_resource_group.env.name
+  value = local.resource_group.name
 }
 
 output "location" {
-  value = azurerm_resource_group.env.location
+  value = local.resource_group.location
 }
 
 output "vnet_id" {

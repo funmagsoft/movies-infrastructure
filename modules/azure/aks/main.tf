@@ -23,6 +23,12 @@ resource "azurerm_kubernetes_cluster" "this" {
     os_disk_size_gb      = 30
     type                 = "VirtualMachineScaleSets"
     orchestrator_version = var.kubernetes_version
+
+    # Configure upgrade settings to avoid surge nodes when vCPU quota is limited
+    # max_surge = "0" means no additional nodes during upgrade (uses max_unavailable instead)
+    upgrade_settings {
+      max_surge = var.node_pool_max_surge
+    }
   }
 
   network_profile {

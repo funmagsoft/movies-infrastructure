@@ -57,11 +57,13 @@ variable "kubernetes_version" {
 
 variable "system_node_vm_size" {
   type        = string
-  default     = "Standard_B2s"
+  default     = "standard_b2s_v2"
   description = "VM size for system node pool"
   validation {
-    condition     = can(regex("^Standard_[A-Z][0-9]+[a-z]?s?$", var.system_node_vm_size))
-    error_message = "VM size must be a valid Azure VM size (e.g., Standard_B2s)."
+    # Accept both Standard_* and standard_* formats, with optional _v2 suffix
+    # Convert to lowercase for comparison to handle both cases
+    condition     = can(regex("^standard_[a-z][0-9]+[a-z]*(_v[0-9]+)?$", lower(var.system_node_vm_size)))
+    error_message = "VM size must be a valid Azure VM size (e.g., standard_b2s_v2, Standard_B2s)."
   }
 }
 
@@ -81,17 +83,6 @@ variable "system_node_max" {
     condition     = var.system_node_max >= var.system_node_min && var.system_node_max <= 100
     error_message = "System node max must be >= min and <= 100."
   }
-}
-
-# Shared ACR lookup
-variable "acr_resource_group_name" {
-  type        = string
-  description = "Resource group name for shared ACR"
-}
-
-variable "acr_name" {
-  type        = string
-  description = "Name of shared ACR"
 }
 
 # auto-injected by ./scripts/generate-backends.sh

@@ -60,3 +60,9 @@ variable "private_endpoint_subnet_id" {
     error_message = "private_endpoint_subnet_id is required when enable_private_endpoint is true"
   }
 }
+
+variable "public_network_access_enabled" {
+  type        = bool
+  default     = null
+  description = "Enable public network access. If null (default), automatically set to false when private endpoint is enabled, true otherwise. Set explicitly to allow both private and public access."
+}

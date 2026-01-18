@@ -97,21 +97,26 @@ fi
 # - env stacks: <env>/<category>/<stack>.tfstate
 # Derive key from stack path
 KEY=""
+TFVARS_FILE=""
 if [[ "${ENV_NAME}" == "global" ]]; then
   # stack-path like stacks/10-global/acr
   STACK_NAME=$(basename "${STACK_PATH}")
   KEY="global/${STACK_NAME}.tfstate"
+  TFVARS_FILE="env/global/${STACK_NAME}.tfvars"
 else
   # stack-path like stacks/20-platform/core or stacks/30-apps/frontend
   CATEGORY=$(basename "$(dirname "${STACK_PATH}")")
   STACK_NAME=$(basename "${STACK_PATH}")
   if [[ "${CATEGORY}" == "20-platform" ]]; then
     KEY="${ENV_NAME}/platform/${STACK_NAME}.tfstate"
+    TFVARS_FILE="env/${ENV_NAME}/platform/${STACK_NAME}.tfvars"
   elif [[ "${CATEGORY}" == "30-apps" ]]; then
     KEY="${ENV_NAME}/apps/${STACK_NAME}.tfstate"
+    TFVARS_FILE="env/${ENV_NAME}/apps/${STACK_NAME}.tfvars"
   else
     # fallback
     KEY="${ENV_NAME}/${CATEGORY}/${STACK_NAME}.tfstate"
+    TFVARS_FILE="env/${ENV_NAME}/${CATEGORY}/${STACK_NAME}.tfvars"
   fi
 fi
 
@@ -147,7 +152,11 @@ case "${ACTION}" in
     info "Initializing Terraform (if needed)..."
     terraform init -backend-config="${REL_PATH_TO_ROOT}/${BACKEND_HCL}" -backend-config="key=${KEY}" -upgrade >/dev/null 2>&1 || true
     info "Running Terraform plan..."
-    if ! terraform plan -var-file="${REL_PATH_TO_ROOT}/env/${ENV_NAME}/backend.auto.tfvars.json" "$@"; then
+    TFVARS_ARGS="-var-file=${REL_PATH_TO_ROOT}/env/${ENV_NAME}/backend.auto.tfvars.json"
+    if [[ -f "${REL_PATH_TO_ROOT}/${TFVARS_FILE}" ]]; then
+      TFVARS_ARGS="${TFVARS_ARGS} -var-file=${REL_PATH_TO_ROOT}/${TFVARS_FILE}"
+    fi
+    if ! terraform plan ${TFVARS_ARGS} "$@"; then
       error_exit "Terraform plan failed"
     fi
     ;;
@@ -155,7 +164,11 @@ case "${ACTION}" in
     info "Initializing Terraform (if needed)..."
     terraform init -backend-config="${REL_PATH_TO_ROOT}/${BACKEND_HCL}" -backend-config="key=${KEY}" -upgrade >/dev/null 2>&1 || true
     info "Running Terraform apply..."
-    if ! terraform apply -var-file="${REL_PATH_TO_ROOT}/env/${ENV_NAME}/backend.auto.tfvars.json" "$@"; then
+    TFVARS_ARGS="-var-file=${REL_PATH_TO_ROOT}/env/${ENV_NAME}/backend.auto.tfvars.json"
+    if [[ -f "${REL_PATH_TO_ROOT}/${TFVARS_FILE}" ]]; then
+      TFVARS_ARGS="${TFVARS_ARGS} -var-file=${REL_PATH_TO_ROOT}/${TFVARS_FILE}"
+    fi
+    if ! terraform apply ${TFVARS_ARGS} "$@"; then
       error_exit "Terraform apply failed"
     fi
     info "✅ Apply completed successfully"
@@ -170,7 +183,11 @@ case "${ACTION}" in
     info "Initializing Terraform (if needed)..."
     terraform init -backend-config="${REL_PATH_TO_ROOT}/${BACKEND_HCL}" -backend-config="key=${KEY}" -upgrade >/dev/null 2>&1 || true
     info "Running Terraform destroy..."
-    if ! terraform destroy -var-file="${REL_PATH_TO_ROOT}/env/${ENV_NAME}/backend.auto.tfvars.json" "$@"; then
+    TFVARS_ARGS="-var-file=${REL_PATH_TO_ROOT}/env/${ENV_NAME}/backend.auto.tfvars.json"
+    if [[ -f "${REL_PATH_TO_ROOT}/${TFVARS_FILE}" ]]; then
+      TFVARS_ARGS="${TFVARS_ARGS} -var-file=${REL_PATH_TO_ROOT}/${TFVARS_FILE}"
+    fi
+    if ! terraform destroy ${TFVARS_ARGS} "$@"; then
       error_exit "Terraform destroy failed"
     fi
     ;;
