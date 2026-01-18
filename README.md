@@ -221,20 +221,45 @@ Typowy `subject` dla environment:
 
 Bootstrap jest **jednorazowy** i rozwiązuje problem „kura i jajko”: zanim użyjesz backendu `azurerm`, musisz stworzyć Storage Account i kontenery na stan.
 
-### 5.1 Krok A: Przygotowanie Entra ID / OIDC (manual)
+### 5.1 Krok A: Przygotowanie Entra ID / OIDC
 
-1. Utwórz App registrations / SP:
+Skrypt pomocniczy automatyzuje tworzenie Service Principals i konfigurację OIDC:
 
-- global
-- dev
-- stage
-- prod
+```bash
+./scripts/setup-oidc.sh [--assign-roles] [--subscription-id SUB_ID]
+```
 
-1. Dodaj Federated Credentials dla GitHub OIDC dla każdego SP.
+**Co robi skrypt:**
+1. Tworzy App Registrations / Service Principals dla: `global`, `dev`, `stage`, `prod`
+2. Konfiguruje Federated Identity Credentials (FIC) dla GitHub OIDC
+3. Opcjonalnie nadaje role RBAC (jeśli użyto `--assign-roles`)
 
-1. Nadaj role zgodnie z sekcją 4.2.
+**Nazewnictwo Service Principals:**
+- `sp-tf-global-fms-movies`
+- `sp-tf-dev-fms-movies`
+- `sp-tf-stage-fms-movies`
+- `sp-tf-prod-fms-movies`
 
-> W praktyce można to zrobić Azure CLI. Jeżeli w repo jest skrypt pomocniczy w `scripts/oidc/`, użyj go. W przeciwnym razie wykonaj ręcznie zgodnie z checklistą.
+**Federated Identity Credentials:**
+- Subject: `repo:funmagsoft/movies-infrastructure:environment:{env}`
+- Repository: `funmagsoft/movies-infrastructure`
+- Environment: `dev`, `stage`, `prod`, `global`
+
+**Przykład użycia:**
+
+```bash
+# Tylko utworzenie SP i konfiguracja OIDC (bez przypisywania ról)
+./scripts/setup-oidc.sh
+
+# Z automatycznym przypisaniem ról RBAC (wymaga istniejących RG i Storage Account)
+./scripts/setup-oidc.sh --assign-roles
+```
+
+> **Uwaga:** Jeśli używasz `--assign-roles`, upewnij się, że:
+> - Bootstrap został wykonany (RG i Storage Account dla tfstate istnieją)
+> - Environment Resource Groups istnieją (dla dev/stage/prod)
+>
+> W przeciwnym razie przypisz role ręcznie zgodnie z checklistą poniżej.
 
 Checklist (per SP):
 
