@@ -108,8 +108,8 @@ Wymuszane tagi na zasobach Azure wspierających tagi:
 
 ### 2.1 Root modules (stacks)
 
-- `stacks/00-bootstrap/backend-local` – bootstrap backendu stanu Terraform (Storage + kontenery)
-- `stacks/10-global/acr` – ACR współdzielony
+- `stacks/00-bootstrap/backend-local` – bootstrap backendu stanu Terraform (Storage + kontenery + Resource Group `rg-fms-movies-shared-plc-01`)
+- `stacks/10-global/acr` – ACR współdzielony (używa Resource Group z bootstrap przez data source)
 - `stacks/20-platform/core` – RG, VNET, subnety
 - `stacks/20-platform/aks` – AKS publiczny z allow-list + Workload Identity + statyczny Public IP dla ingress
 - `stacks/20-platform/data` – KV/SB/Storage (opcjonalne, sterowane flagami)
@@ -381,10 +381,12 @@ terraform apply
 
 Ten stack **nie** używa backendu `azurerm` (stan lokalny) i powinien utworzyć:
 
-- Resource Group backendu (np. `rg-fms-movies-shared-plc-01`)
+- Resource Group backendu (np. `rg-fms-movies-shared-plc-01`) - **współdzielony z stackiem ACR**
 - Storage Account (constrained name, np. `st<...>tf<...>`)
 - Kontenery `tfstate-global`, `tfstate-dev`, `tfstate-stage`, `tfstate-prod`
 - Hardening Storage Account (HTTPS only, TLS min, versioning, soft delete)
+
+> **Uwaga:** Resource Group utworzony przez bootstrap jest współdzielony z stackiem `stacks/10-global/acr`. Stack ACR używa data source do odwołania się do tego RG, zamiast tworzyć własny.
 
 1. **Po `apply` zanotuj outputy:**
 
@@ -564,6 +566,8 @@ az role assignment list \
    ```
 
    > **Uwaga:** Stack `stacks/10-global/acr` używa środowiska `global` i backendu `azurerm` (zdalny stan w kontenerze `tfstate-global`).
+   >
+   > **Architektura:** Stack ACR używa data source do odwołania się do Resource Group utworzonego przez bootstrap (`rg-fms-movies-shared-plc-01`), zamiast tworzyć własny. Oba stacki (bootstrap i ACR) współdzielą ten sam Resource Group dla zasobów globalnych/shared.
 
 ### 6.2 Per środowisko (dev, potem stage, potem prod)
 
