@@ -11,7 +11,7 @@ module "std" {
 }
 
 locals {
-  rg_name = "rg-${module.std.name_suffix}"  # rg-fms-movies-shared-plc-01
+  rg_name = "rg-${module.std.name_suffix}" # rg-fms-movies-shared-plc-01
 
   # Constrained name for tfstate storage account
   # st + constrained_suffix (<= 24)
@@ -30,16 +30,16 @@ resource "azurerm_resource_group" "tfstate" {
 }
 
 resource "azurerm_storage_account" "tfstate" {
-  name                     = local.sa_name
-  resource_group_name      = azurerm_resource_group.tfstate.name
-  location                 = azurerm_resource_group.tfstate.location
+  name                = local.sa_name
+  resource_group_name = azurerm_resource_group.tfstate.name
+  location            = azurerm_resource_group.tfstate.location
 
   account_tier             = "Standard"
   account_replication_type = "LRS"
 
-  enable_https_traffic_only = true
-  min_tls_version           = "TLS1_2"
-  allow_blob_public_access  = false
+  https_traffic_only_enabled      = true
+  min_tls_version                 = "TLS1_2"
+  allow_nested_items_to_be_public = false
 
   blob_properties {
     versioning_enabled = true
@@ -58,24 +58,24 @@ resource "azurerm_storage_account" "tfstate" {
 
 resource "azurerm_storage_container" "global" {
   name                  = "tfstate-global"
-  storage_account_name  = azurerm_storage_account.tfstate.name
+  storage_account_id    = azurerm_storage_account.tfstate.id
   container_access_type = "private"
 }
 
 resource "azurerm_storage_container" "dev" {
   name                  = "tfstate-dev"
-  storage_account_name  = azurerm_storage_account.tfstate.name
+  storage_account_id    = azurerm_storage_account.tfstate.id
   container_access_type = "private"
 }
 
 resource "azurerm_storage_container" "stage" {
   name                  = "tfstate-stage"
-  storage_account_name  = azurerm_storage_account.tfstate.name
+  storage_account_id    = azurerm_storage_account.tfstate.id
   container_access_type = "private"
 }
 
 resource "azurerm_storage_container" "prod" {
   name                  = "tfstate-prod"
-  storage_account_name  = azurerm_storage_account.tfstate.name
+  storage_account_id    = azurerm_storage_account.tfstate.id
   container_access_type = "private"
 }

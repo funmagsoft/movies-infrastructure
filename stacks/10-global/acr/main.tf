@@ -15,22 +15,17 @@ locals {
   acr_name = substr("acr${module.std.constrained_suffix}", 0, 50)
 }
 
-resource "azurerm_resource_group" "global" {
-  name     = local.rg_name
-  location = var.region
-  tags     = module.std.tags
-
-  lifecycle {
-    prevent_destroy = true
-    ignore_changes  = [tags]
-  }
+# Resource Group is created by bootstrap stack (stacks/00-bootstrap/backend-local)
+# We reference it using data source instead of creating it
+data "azurerm_resource_group" "global" {
+  name = local.rg_name
 }
 
 module "acr" {
   source              = "../../../modules/azure/acr"
   name                = local.acr_name
-  resource_group_name = azurerm_resource_group.global.name
-  location            = azurerm_resource_group.global.location
+  resource_group_name = data.azurerm_resource_group.global.name
+  location            = data.azurerm_resource_group.global.location
   sku                 = "Basic"
   tags                = module.std.tags
 }

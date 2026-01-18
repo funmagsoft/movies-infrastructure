@@ -1,0 +1,249 @@
+---
+description: Standard template for Terraform module README.md documentation
+globs: ["terraform/modules/**/README.md"]
+alwaysApply: true
+---
+
+# Module README Template
+
+> This document defines the mandatory structure and format for module README.md files.
+> All module documentation must follow this template to ensure consistency.
+
+When creating or updating module README.md files, use the following structure and format.
+
+## Required Structure
+
+Every module README.md MUST follow this structure in the specified order. **ALL sections (1-13) are MANDATORY and MUST be present**, even if some sections are empty. This ensures consistency and readability across all module documentation.
+
+### 1. Header and Description
+
+```markdown
+# {Module Name} Module
+
+{One-line description of what the module does and its primary purpose.}
+```
+
+### 2. Resources Created
+
+List all resources created by the module:
+
+```markdown
+## Resources Created
+
+- **{Resource 1}** - {Brief description}
+- **{Resource 2}** - {Brief description}
+- **{Resource N}** - {Brief description}
+```
+
+### 3. Features
+
+List key features and capabilities:
+
+```markdown
+## Features
+
+- {Feature 1}
+- {Feature 2}
+- {Feature N}
+```
+
+### 4. Usage
+
+Provide a basic usage example:
+
+```markdown
+## Usage
+
+\`\`\`hcl
+module "{module_name}" {
+  source = "../../modules/{module_name}"
+
+  resource_group_name = "rg-ecare-dev"
+  location            = "West Europe"
+  environment         = "dev"
+  project_name        = "ecare"
+
+  # Module-specific required variables
+  # ...
+
+  # Private Endpoint configuration (if applicable)
+  subnet_id = data.terraform_remote_state.foundation.outputs.data_subnet_id
+  # ...
+
+  tags = local.common_tags
+}
+\`\`\`
+```
+
+### 5. Inputs
+
+Document all input variables in a table format:
+
+```markdown
+## Inputs
+
+| Name | Description | Type | Default | Required |
+|------|-------------|------|---------|:--------:|
+| resource_group_name | Name of the resource group | `string` | - | yes |
+| location | Azure region for resources | `string` | - | yes |
+| environment | Environment name (dev, test, stage, prod) | `string` | - | yes |
+| project_name | Project name for resource naming | `string` | `"ecare"` | no |
+| {module_specific_var} | {Description} | `{type}` | `{default}` | {yes/no} |
+| tags | Tags to apply to all resources | `map(string)` | `{}` | no |
+```
+
+### 6. Outputs
+
+Document all outputs in a table format:
+
+```markdown
+## Outputs
+
+| Name | Description | Sensitive |
+|------|-------------|-----------|
+| {resource}_id | ID of the {resource} | no |
+| {resource}_name | Name of the {resource} | no |
+| {resource}_uri | URI of the {resource} | no |
+```
+
+### 7. Module-Specific Configuration
+
+**REQUIRED**: This section MUST always be present, even if empty. Add module-specific sections as needed:
+
+```markdown
+## Module-Specific Configuration
+
+{Module-specific details, examples, or advanced configuration. If no module-specific content exists, use: "No module-specific configuration required."}
+
+### {Subsection Title}
+
+{Content specific to this module}
+```
+
+Common module-specific sections include:
+
+- Network Configuration (for AKS, Storage)
+- SKU Comparison (for Key Vault, Service Bus, ACR)
+- High Availability (for PostgreSQL)
+- Scaling (for AKS)
+- Connection Examples (for PostgreSQL, Storage)
+- RBAC Authorization (for Key Vault)
+- Installed Tools (for Bastion)
+- Node Pools (for AKS)
+- OIDC Issuer URL (for AKS)
+
+### 8. Naming Convention
+
+Document the naming patterns used:
+
+```markdown
+## Naming Convention
+
+Resources follow this naming pattern:
+
+- **{Resource Type}**: `{prefix}-{project_name}-{environment}` (e.g., `{prefix}-ecare-dev`)
+- **{Other Resource}**: `{pattern}`
+
+{Note about Azure naming constraints if applicable}
+```
+
+### 9. Security Features
+
+Document security-related features:
+
+```markdown
+## Security Features
+
+{Module-specific security features, network isolation, encryption, etc.}
+```
+
+### 10. Examples
+
+Provide environment-specific examples:
+
+```markdown
+## Examples
+
+### Development Environment
+
+\`\`\`hcl
+module "{module_name}" {
+  source = "../../modules/{module_name}"
+
+  resource_group_name = "rg-ecare-dev"
+  location            = "West Europe"
+  environment         = "dev"
+
+  # Dev-specific configuration
+  # ...
+}
+\`\`\`
+
+### Production Environment
+
+\`\`\`hcl
+module "{module_name}" {
+  source = "../../modules/{module_name}"
+
+  resource_group_name = "rg-ecare-prod"
+  location            = "West Europe"
+  environment         = "prod"
+
+  # Prod-specific configuration
+  # ...
+}
+\`\`\`
+```
+
+### 11. Integration with Other Modules
+
+**REQUIRED**: This section MUST always be present, even if empty. Document how this module integrates with others:
+
+```markdown
+## Integration with Other Modules
+
+{How this module integrates with other modules. If no integration exists, use: "No specific integration with other modules."}
+```
+
+### 12. Prerequisites
+
+List prerequisites from Phase 1 (foundation):
+
+```markdown
+## Prerequisites
+
+From Phase 1 (foundation):
+
+- {Prerequisite 1}
+- {Prerequisite 2}
+```
+
+### 13. Terraform Version
+
+Document required Terraform and provider versions:
+
+```markdown
+## Terraform Version
+
+- Terraform >= 1.5.0
+- AzureRM Provider ~> 3.0
+```
+
+## Formatting Guidelines
+
+- Use proper heading hierarchy (H1 → H2 → H3)
+- Use code blocks with `hcl` language tag for Terraform examples
+- Use backticks for inline code, resource names, and variable names
+- Use tables for structured data (Inputs, Outputs)
+- Keep line length reasonable (max 120 characters)
+- Use descriptive link text if links are included
+- Every file MUST end with exactly one '\n'
+
+## Important Notes
+
+- **DO NOT** include sections generated by `terraform_docs` (Requirements, Providers, Modules, Resources)
+- **DO** maintain Inputs and Outputs tables manually with descriptive content
+- **DO** include module-specific sections that add value for users
+- **DO** provide practical examples for different environments
+- **DO** document security features and network isolation
+- **DO** explain naming conventions and Azure constraints

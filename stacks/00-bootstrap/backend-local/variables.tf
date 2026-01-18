@@ -28,6 +28,12 @@ variable "instance" {
   default = "01"
 }
 
+variable "subscription_id" {
+  type        = string
+  default     = null
+  description = "Azure subscription ID. If not provided, will be read from Azure CLI or ARM_SUBSCRIPTION_ID environment variable."
+}
+
 variable "tags" {
   type = map(string)
   default = {

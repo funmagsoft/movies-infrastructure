@@ -85,7 +85,7 @@ write_backend "prod" "tfstate-prod"
 info "Creating backend.auto.tfvars.json files..."
 
 for env in global dev stage prod; do
-  local file="env/${env}/backend.auto.tfvars.json"
+  file="env/${env}/backend.auto.tfvars.json"
   if ! cat > "${file}" <<EOF
 {
   "tfstate_resource_group_name": "${TFSTATE_RG}",

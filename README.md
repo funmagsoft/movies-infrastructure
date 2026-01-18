@@ -33,14 +33,14 @@ Repozytorium infrastruktury dla systemu **movies** (organizacja **fms**) wdraża
 2. **Wdróż globalny ACR:**
 
    ```bash
-   ./scripts/tf.sh global 10-global/acr apply
+   ./scripts/tf.sh global stacks/10-global/acr apply
    ```
 
 3. **Wdróż platformę (per środowisko):**
 
    ```bash
-   ./scripts/tf.sh dev 20-platform/core apply
-   ./scripts/tf.sh dev 20-platform/aks apply
+   ./scripts/tf.sh dev stacks/20-platform/core apply
+   ./scripts/tf.sh dev stacks/20-platform/aks apply
    ```
 
 Więcej szczegółów w [dokumentacji](docs/).
@@ -135,12 +135,14 @@ oraz backend:
 Pliki `env/**/platform/*.tfvars` i `env/**/apps/*.tfvars` są **śledzone w git**, ponieważ zawierają tylko konfigurację infrastruktury (flagi, nazwy zasobów, CIDR ranges, konfigurację node pools).
 
 **⚠️ WAŻNE: NIGDY nie dodawaj do plików tfvars:**
+
 - Hasła, klucze API, tokeny dostępu
 - Connection strings z credentials
 - Private keys, certificates
 - Inne wrażliwe dane (secrets)
 
 **Dla wrażliwych danych używaj:**
+
 - Azure Key Vault (moduł `modules/azure/keyvault`)
 - Environment variables w CI/CD pipelines
 - Terraform variables z `sensitive = true` przekazywane przez zmienne środowiskowe
@@ -230,66 +232,171 @@ Skrypt pomocniczy automatyzuje tworzenie Service Principals i konfigurację OIDC
 ```
 
 **Co robi skrypt:**
+
 1. Tworzy App Registrations / Service Principals dla: `global`, `dev`, `stage`, `prod`
 2. Konfiguruje Federated Identity Credentials (FIC) dla GitHub OIDC
 3. Opcjonalnie nadaje role RBAC (jeśli użyto `--assign-roles`)
 
 **Nazewnictwo Service Principals:**
+
 - `sp-tf-global-fms-movies`
 - `sp-tf-dev-fms-movies`
 - `sp-tf-stage-fms-movies`
 - `sp-tf-prod-fms-movies`
 
 **Federated Identity Credentials:**
+
 - Subject: `repo:funmagsoft/movies-infrastructure:environment:{env}`
 - Repository: `funmagsoft/movies-infrastructure`
 - Environment: `dev`, `stage`, `prod`, `global`
 
-**Przykład użycia:**
+#### Opcja 1: Uruchomienie bez `--assign-roles` (zalecane na początku)
+
+Możesz uruchomić skrypt **przed** wykonaniem kroku 5.2 (bootstrap backendu).** Skrypt utworzy tylko Service Principals i FIC, bez przypisywania ról RBAC.
 
 ```bash
-# Tylko utworzenie SP i konfiguracja OIDC (bez przypisywania ról)
 ./scripts/setup-oidc.sh
+```
 
-# Z automatycznym przypisaniem ról RBAC (wymaga istniejących RG i Storage Account)
+**Wymagania:**
+
+- Brak wymagań wstępnych - możesz uruchomić w dowolnym momencie
+- Wystarczy być zalogowanym do Azure CLI (`az login`)
+
+**Co zostanie utworzone:**
+
+- 4 App Registrations / Service Principals (global, dev, stage, prod)
+- 4 Federated Identity Credentials dla GitHub OIDC
+
+**Następne kroki:**
+
+- Po utworzeniu SP i FIC, role RBAC musisz przypisać ręcznie (zobacz checklistę poniżej) lub użyć opcji 2 po wykonaniu wymaganych kroków.
+
+#### Opcja 2: Uruchomienie z `--assign-roles` (automatyczne przypisanie ról)
+
+Skrypt automatycznie przypisze wszystkie wymagane role RBAC, ale **wymaga wykonania wcześniejszych kroków**.
+
+```bash
 ./scripts/setup-oidc.sh --assign-roles
 ```
 
-> **Uwaga:** Jeśli używasz `--assign-roles`, upewnij się, że:
-> - Bootstrap został wykonany (RG i Storage Account dla tfstate istnieją)
-> - Environment Resource Groups istnieją (dla dev/stage/prod)
->
-> W przeciwnym razie przypisz role ręcznie zgodnie z checklistą poniżej.
+**Wymagania wstępne:**
 
-Checklist (per SP):
+1. **Krok 5.2 musi być wykonany** (bootstrap backendu):
+   - Resource Group backendu tfstate (utworzony przez `stacks/00-bootstrap/backend-local`)
+   - Storage Account backendu tfstate (utworzony przez `stacks/00-bootstrap/backend-local`)
+   - Kontenery `tfstate-global`, `tfstate-dev`, `tfstate-stage`, `tfstate-prod` w Storage Account
+
+   Skrypt odczytuje te zasoby z outputów Terraform stacka `stacks/00-bootstrap/backend-local`:
+   - `tfstate_resource_group_name` - nazwa Resource Group backendu
+   - `tfstate_storage_account_name` - nazwa Storage Account backendu
+
+2. **Dla dev/stage/prod: Environment Resource Groups muszą istnieć:**
+   - `rg-fms-movies-dev-plc-01` (utworzony przez `stacks/20-platform/core` dla środowiska dev)
+   - `rg-fms-movies-stage-plc-01` (utworzony przez `stacks/20-platform/core` dla środowiska stage)
+   - `rg-fms-movies-prod-plc-01` (utworzony przez `stacks/20-platform/core` dla środowiska prod)
+
+   > **Uwaga:** Dla SP `sp-tf-global-fms-movies` role są przypisywane ręcznie do zasobów globalnych (np. ACR), więc Environment RG nie jest wymagany.
+
+**Kolejność wykonania dla opcji 2:**
+
+1. Wykonaj **Krok 5.2** (bootstrap backendu) - utworzy RG i Storage Account dla tfstate
+2. (Opcjonalnie) Wykonaj **Krok 6.2** dla każdego środowiska (`stacks/20-platform/core`) - utworzy Environment Resource Groups
+3. Uruchom `./scripts/setup-oidc.sh --assign-roles`
+
+**Co zostanie utworzone/przypisane:**
+
+- 4 App Registrations / Service Principals
+- 4 Federated Identity Credentials
+- Role RBAC dla każdego SP:
+  - **Owner** na Environment Resource Group (dla dev/stage/prod)
+  - **Storage Blob Data Contributor** na kontenerze tfstate (`tfstate-{env}`)
+  - **Reader** na Resource Group backendu tfstate
+  - **Reader** na kontenerze `tfstate-global` (dla dev/stage/prod, aby uzyskać dostęp do outputów ACR)
+
+**Jeśli zasoby nie istnieją:**
+
+Jeśli uruchomisz `--assign-roles` przed wykonaniem wymaganych kroków, skrypt:
+
+- Utworzy SP i FIC (jak w opcji 1)
+- Pominie przypisanie ról RBAC z komunikatem ostrzegawczym
+- Wyświetli instrukcje, jak przypisać role ręcznie
+
+#### Checklist ręcznego przypisania ról (jeśli nie używasz `--assign-roles`)
+
+Dla każdego Service Principal (`sp-tf-{env}-fms-movies`):
 
 - [ ] SP istnieje
 - [ ] FIC skonfigurowany dla właściwego environment
-- [ ] RBAC na RG środowiska
-- [ ] RBAC do kontenera tfstate
-- [ ] (dla env) read-only do `tfstate-global`
+- [ ] **Owner** na Environment Resource Group: `rg-fms-movies-{env}-plc-01` (dla dev/stage/prod)
+- [ ] **Storage Blob Data Contributor** na kontenerze tfstate: `tfstate-{env}` w Storage Account backendu
+- [ ] **Reader** na Resource Group backendu tfstate (z kroku 5.2)
+- [ ] **Reader** na kontenerze `tfstate-global` (dla dev/stage/prod, aby uzyskać dostęp do outputów ACR)
 
 ### 5.2 Krok B: Wdrożenie backendu stanu Terraform (lokalny stan)
 
-1. Przejdź do stacka bootstrap:
+1. **Upewnij się, że jesteś zalogowany do Azure:**
+
+```bash
+az login
+```
+
+> **⚠️ WAŻNE:** Provider AzureRM (v4.50.0+) wymaga jawnego ustawienia subscription ID. Jeśli nie ustawisz subscription ID, otrzymasz błąd: `subscription ID could not be determined and was not specified`.
+>
+> **💡 Automatyczne ustawienie:** Skrypt `tf.sh` automatycznie ustawia `ARM_SUBSCRIPTION_ID` z Azure CLI, więc nie musisz tego robić ręcznie przy użyciu wrappera.
+>
+> **Dostępne opcje ustawienia subscription ID (jeśli używasz Terraform bezpośrednio):**
+>
+> 1. **Zmienna środowiskowa (zalecane):**
+>
+>    ```bash
+>    export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+>    ```
+>
+> 2. **Zmienna Terraform:**
+>
+>    ```bash
+>    terraform plan -var="subscription_id=$(az account show --query id -o tsv)"
+>    ```
+>
+>    Lub ustaw na stałe w sesji:
+>
+>    ```bash
+>    export TF_VAR_subscription_id=$(az account show --query id -o tsv)
+>    ```
+
+1. **Przejdź do stacka bootstrap:**
 
 ```bash
 cd stacks/00-bootstrap/backend-local
 ```
 
-1. Wykonaj `init/plan/apply`.
+1. **Wykonaj `init/plan/apply`:**
 
-- Ten stack **nie** używa backendu `azurerm` (stan lokalny) i powinien utworzyć:
-  - RG backendu,
-  - Storage Account,
-  - kontenery `tfstate-global/dev/stage/prod`,
-  - hardening Storage Account (HTTPS only, TLS min, versioning, soft delete).
+```bash
+terraform init
+terraform plan
+terraform apply
+```
 
-1. Po `apply` zanotuj outputy:
+Ten stack **nie** używa backendu `azurerm` (stan lokalny) i powinien utworzyć:
 
-- nazwa resource group backendu
-- nazwa storage account
-- lista kontenerów
+- Resource Group backendu (np. `rg-fms-movies-shared-plc-01`)
+- Storage Account (constrained name, np. `st<...>tf<...>`)
+- Kontenery `tfstate-global`, `tfstate-dev`, `tfstate-stage`, `tfstate-prod`
+- Hardening Storage Account (HTTPS only, TLS min, versioning, soft delete)
+
+1. **Po `apply` zanotuj outputy:**
+
+```bash
+terraform output
+```
+
+Zapisz:
+
+- nazwa resource group backendu (`tfstate_resource_group_name`)
+- nazwa storage account (`tfstate_storage_account_name`)
+- lista kontenerów (`containers`)
 
 ### 5.3 Krok C: Wygenerowanie plików `backend.hcl` w `env/*`
 
@@ -324,17 +431,139 @@ A `terraform init` dostaje:
 
 Wrapper `scripts/tf.sh` robi to automatycznie.
 
+#### Wymagane uprawnienia dla lokalnego użytkownika
+
+Podczas pierwszego `terraform init` z backendem `azurerm` możesz napotkać błąd **403 (AuthorizationPermissionMismatch)**. Oznacza to, że Twoje konto Azure nie ma wymaganych uprawnień do kontenera z stanem Terraform.
+
+**Wymagane uprawnienia:**
+
+- **Storage Blob Data Contributor** na kontenerze tfstate dla danego środowiska (np. `tfstate-global`, `tfstate-dev`)
+- **Reader** na Resource Group backendu tfstate (opcjonalnie, ale zalecane)
+
+**Jak przypisać uprawnienia:**
+
+> **💡 Zalecane:** Użyj skryptu `assign-tfstate-permissions.sh`, który automatycznie pobiera informacje z bootstrap stack i przypisuje wymagane uprawnienia:
+>
+> ```bash
+> # Dla wszystkich środowisk (global, dev, stage, prod) - zalecane
+> ./scripts/assign-tfstate-permissions.sh --all-environments --dry-run  # najpierw sprawdź
+> ./scripts/assign-tfstate-permissions.sh --all-environments           # następnie wykonaj
+>
+> # Dla pojedynczego środowiska
+> ./scripts/assign-tfstate-permissions.sh --environment global --dry-run
+> ./scripts/assign-tfstate-permissions.sh --environment global
+> ./scripts/assign-tfstate-permissions.sh --environment dev
+> ./scripts/assign-tfstate-permissions.sh --environment stage
+> ./scripts/assign-tfstate-permissions.sh --environment prod
+>
+> # Z określonym użytkownikiem
+> ./scripts/assign-tfstate-permissions.sh --all-environments --user-id "12345678-1234-1234-1234-123456789012"
+>
+> # Na poziomie Storage Account (wszystkie kontenery)
+> ./scripts/assign-tfstate-permissions.sh --environment global --scope storage-account
+> ```
+>
+> Skrypt automatycznie:
+>
+> - Pobiera informacje o Storage Account z bootstrap stack
+> - Pobiera ID zalogowanego użytkownika (lub używa podanego `--user-id`)
+> - Sprawdza, czy rola już istnieje
+> - Przypisuje rolę `Storage Blob Data Contributor` na odpowiednim kontenerze
+> - Weryfikuje przypisanie roli
+
+**Ręczne przypisanie uprawnień (alternatywa):**
+
+- **Sprawdź, kim jesteś zalogowany:**
+
+```bash
+az account show --query user
+```
+
+- **Pobierz ID Storage Account i kontenera:**
+
+```bash
+# Dla środowiska global
+STORAGE_ACCOUNT_ID=$(az storage account show \
+  --name stfmsmovxplcb3d001tf \
+  --resource-group rg-fms-movies-shared-plc-01 \
+  --query id -o tsv)
+
+CONTAINER_ID="${STORAGE_ACCOUNT_ID}/blobServices/default/containers/tfstate-global"
+
+# Dla środowisk dev/stage/prod użyj odpowiedniego kontenera:
+# CONTAINER_ID="${STORAGE_ACCOUNT_ID}/blobServices/default/containers/tfstate-dev"
+```
+
+- **Pobierz ID użytkownika:**
+
+```bash
+USER_ID=$(az ad signed-in-user show --query id -o tsv)
+```
+
+- **Przypisz rolę Storage Blob Data Contributor:**
+
+```bash
+az role assignment create \
+  --role "Storage Blob Data Contributor" \
+  --assignee "${USER_ID}" \
+  --scope "${CONTAINER_ID}"
+```
+
+**Alternatywnie** (jeśli masz uprawnienia Owner/User Access Administrator), możesz przypisać rolę na poziomie Storage Account (będzie dotyczyć wszystkich kontenerów):
+
+```bash
+az role assignment create \
+  --role "Storage Blob Data Contributor" \
+  --assignee "${USER_ID}" \
+  --scope "${STORAGE_ACCOUNT_ID}"
+```
+
+**Weryfikacja:**
+
+```bash
+az role assignment list \
+  --assignee "${USER_ID}" \
+  --scope "${CONTAINER_ID}" \
+  --output table
+```
+
+> **Uwaga:** Jeśli nie masz uprawnień do przypisania ról, poproś administratora subskrypcji o przypisanie roli `Storage Blob Data Contributor` na odpowiednim kontenerze tfstate dla Twojego konta użytkownika.
+
 ## 6. Kolejność wdrożeń (rekomendowana)
 
 ### 6.1 Jednorazowo
 
-1. Bootstrap backend:
+> **Uwaga:** Jeśli wykonujesz pełny bootstrap po raz pierwszy, kroki 1-2 zostały już wykonane w sekcji 5 (Bootstrap – procedura szczegółowa). Przejdź do kroku 3.
 
-- `stacks/00-bootstrap/backend-local`
+1. **Bootstrap backend** (jeśli jeszcze nie wykonany):
 
-1. Globalny ACR:
+   Wykonaj kroki z sekcji **5.2 Krok B: Wdrożenie backendu stanu Terraform**:
 
-- `stacks/10-global/acr`
+   ```bash
+   cd stacks/00-bootstrap/backend-local
+   # Ustaw ARM_SUBSCRIPTION_ID (wymagane dla AzureRM provider v4.50.0+)
+   export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
+   terraform init
+   terraform plan
+   terraform apply
+   cd ../../..
+   ```
+
+   > **💡 Uwaga:** Dla stacków używających `tf.sh` wrappera, `ARM_SUBSCRIPTION_ID` jest automatycznie ustawiane z Azure CLI. Ręczne ustawienie jest wymagane tylko dla stacka bootstrap, który używa lokalnego stanu.
+
+   Następnie wygeneruj pliki `backend.hcl` (sekcja **5.3 Krok C**):
+
+   ```bash
+   ./scripts/generate-backends.sh
+   ```
+
+2. **Globalny ACR:**
+
+   ```bash
+   ./scripts/tf.sh global stacks/10-global/acr apply
+   ```
+
+   > **Uwaga:** Stack `stacks/10-global/acr` używa środowiska `global` i backendu `azurerm` (zdalny stan w kontenerze `tfstate-global`).
 
 ### 6.2 Per środowisko (dev, potem stage, potem prod)
 
@@ -356,6 +585,10 @@ Zakładamy wrapper:
 ```bash
 ./scripts/tf.sh <env> <stack> plan
 ./scripts/tf.sh <env> <stack> apply
+./scripts/tf.sh <env> <stack> init
+./scripts/tf.sh <env> <stack> output
+./scripts/tf.sh <env> <stack> destroy
+./scripts/tf.sh <env> <stack> force-unlock <lock-id>
 ```
 
 Gdzie `<stack>` to np.:
@@ -365,12 +598,33 @@ Gdzie `<stack>` to np.:
 - `20-platform/aks`
 - `30-apps/frontend`
 
-Wrapper powinien:
+Wrapper automatycznie:
 
-- wejść do właściwego katalogu `stacks/...`,
-- dobrać tfvars z `env/<env>/...`,
-- ustawić backend.hcl i key,
-- uruchomić terraform.
+- ustawia `ARM_SUBSCRIPTION_ID` z Azure CLI (jeśli nie jest ustawione),
+- wchodzi do właściwego katalogu `stacks/...`,
+- dobiera tfvars z `env/<env>/backend.auto.tfvars.json`,
+- ustawia backend.hcl i key,
+- uruchamia terraform.
+
+**Dostępne akcje:**
+
+- `init` - inicjalizuje Terraform z backendem
+- `plan` - generuje plan zmian
+- `apply` - aplikuje zmiany
+- `destroy` - niszczy zasoby (z potwierdzeniem)
+- `output` - wyświetla outputy
+- `force-unlock <lock-id>` - odblokowuje zablokowany stan (używaj ostrożnie!)
+
+**Przykład użycia force-unlock:**
+
+Jeśli otrzymasz błąd `Error acquiring the state lock`, możesz odblokować stan:
+
+```bash
+# Lock ID jest widoczny w komunikacie błędu
+./scripts/tf.sh global stacks/10-global/acr force-unlock 209643d6-2f1c-de36-b16d-ac13563f13e7
+```
+
+> **⚠️ Uwaga:** Używaj `force-unlock` tylko wtedy, gdy jesteś pewien, że lock jest nieaktualny (np. po przerwanej operacji). Jeśli inna operacja Terraform jest w toku, odblokowanie może spowodować konflikt.
 
 ### 7.2 Włączanie usług (KV/SB/Storage/Observability)
 
@@ -383,7 +637,7 @@ W `env/<env>/platform/data.tfvars` ustaw:
 Następnie:
 
 ```bash
-./scripts/tf.sh <env> 20-platform/data apply
+./scripts/tf.sh <env> stacks/20-platform/data apply
 ```
 
 Analogicznie dla monitoringu.
@@ -396,7 +650,7 @@ Analogicznie dla monitoringu.
 1. Wdrażaj niezależnie:
 
 ```bash
-./scripts/tf.sh dev 30-apps/<service> apply
+./scripts/tf.sh dev stacks/30-apps/<service> apply
 ```
 
 ## 8. AKS – dostęp i bezpieczeństwo
@@ -477,10 +731,35 @@ Po stronie pipeline aplikacji (`movies-frontend` i `movies-backend`) publikujesz
 - Sprawdź authorized IP ranges w AKS.
 - Sprawdź RBAC (Entra/Kubernetes).
 
-### 10.2 Brak dostępu do stanu Terraform
+### 10.2 Problemy z dostępem do stanu Terraform
 
-- Sprawdź, czy SP ma `Storage Blob Data Contributor` do właściwego kontenera.
+**Błąd 403 (AuthorizationPermissionMismatch):**
+
+- Sprawdź, czy masz `Storage Blob Data Contributor` na właściwym kontenerze tfstate.
+- Użyj skryptu `assign-tfstate-permissions.sh` do przypisania uprawnień (patrz sekcja 5.4).
 - Sprawdź, czy backend.hcl wskazuje na właściwy kontener.
+
+**Błąd "state blob is already locked":**
+
+Jeśli otrzymasz błąd `Error acquiring the state lock`, oznacza to, że poprzednia operacja Terraform nie zakończyła się poprawnie i pozostawiła lock.
+
+**Rozwiązanie:**
+
+1. Sprawdź, czy nie ma innej operacji Terraform w toku.
+2. Jeśli lock jest nieaktualny, odblokuj go używając `force-unlock`:
+
+```bash
+# Lock ID jest widoczny w komunikacie błędu
+./scripts/tf.sh <env> <stack> force-unlock <lock-id>
+```
+
+**Przykład:**
+
+```bash
+./scripts/tf.sh global stacks/10-global/acr force-unlock 209643d6-2f1c-de36-b16d-ac13563f13e7
+```
+
+> **⚠️ Uwaga:** Używaj `force-unlock` tylko wtedy, gdy jesteś pewien, że lock jest nieaktualny. Jeśli inna operacja Terraform jest w toku, odblokowanie może spowodować konflikt i uszkodzenie stanu.
 
 ### 10.3 Problemy z role assignments
 

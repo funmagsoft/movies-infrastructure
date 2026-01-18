@@ -1,0 +1,155 @@
+---
+description: Enforces Terraform coding standards for Azure, resource naming conventions, module structure, and IaC security policies.
+globs: ["**/*.tf", "**/*.tfvars"]
+alwaysApply: true
+---
+
+# Azure Terraform Best Practices & Style Guide
+
+> This document defines mandatory project conventions.
+> These rules apply to both human contributors and AI-generated code.
+
+You are acting as a Senior DevOps Engineer and Certified Azure Solutions Architect. When generating or refactoring Terraform code, strictly adhere to the following standards.
+
+## 1. Naming Conventions
+
+- **Terraform Resources:** Use `snake_case` for resource and data source names (e.g., `resource "azurerm_storage_account" "data_storage" {}`).
+- **Azure Physical Resources:** Follow the kebab-case convention: `<prefix>-<project>-<environment>`.
+  - **Prefixes:** `rg` (Resource Group), `kv` (Key Vault), `aks` (Kubernetes), `vnet` (Virtual Network), `psql` (PostgreSQL), `sb` (Service Bus).
+  - **Examples:** `kv-ecare-dev`, `aks-ecare-dev`, `sb-ecare-dev`.
+  - **Note:** Region is NOT included in resource names. Resources are deployed to a single region per environment.
+  - **Azure Naming Constraints:** Some Azure resources have specific naming requirements:
+    - **Storage Accounts:** Must be lowercase alphanumeric, no hyphens allowed. Format: `st{org}{project}{env}{hash}` (e.g., `sthycomecaredev1a2b`).
+    - **Container Registry (ACR):** Must be lowercase alphanumeric, no hyphens allowed. Format: `acr{project}{env}` (e.g., `acrecaredev`).
+- **Data Sources:** Always name data sources `main` or `current` if they refer to the primary/only source of that type in the file.
+
+## 2. Code Structure & Modularization
+
+- **Module-First Approach:** Always prefer calling modules from `../../modules` rather than defining raw resources in environment folders.
+- **File Separation:** Do not keep all resources in a single `main.tf`. Split logic into:
+  - `data.tf`: Remote states and data lookups.
+  - `network.tf`: SNETs, NSGs, and Private Endpoints.
+  - `security.tf`: Key Vault and RBAC Role Assignments.
+  - `compute.tf`: AKS, VM, Container Registry.
+  - `storage.tf`: Databases and Storage Accounts.
+- **Standard Environment Files:** Every environment directory (`terraform/environments/<env>/`) MUST include the following standard files (unless a file is empty and not needed):
+  - `backend.tf`: Backend configuration for remote state.
+  - `data.tf`: Data sources (remote states and resource lookups).
+  - `locals.tf`: Local variables and computed values.
+  - `outputs.tf`: Output values for cross-module integration.
+  - `providers.tf`: Terraform configuration block and provider definitions.
+  - `variables.tf`: Input variables for the environment.
+  - **Module-specific files:** Additionally, include files corresponding to modules used in that environment (e.g., `workload-identity.tf`, `network.tf`, `storage.tf`, `security.tf`, `compute.tf`, etc.).
+- **Providers:** Ensure `required_version` and `required_providers` are always pinned.
+
+## 3. Variables and Outputs
+
+- **Strong Typing:** Every `variable` MUST have a `type` and a meaningful `description`.
+- **Validation:** Use `validation {}` blocks for environment names or SKU constraints.
+- **Sensitivity:** Mark passwords, tokens, and secrets with `sensitive = true`.
+- **Outputs:** Provide outputs for IDs and Endpoints of created resources to facilitate cross-module integration.
+
+## 4. Security & Governance (Azure Specific)
+
+- **Zero Secrets in Code:** NEVER hardcode credentials. Use `azurerm_key_vault_secret` for retrieval.
+- **Network Isolation:** By default, set `public_network_access_enabled = false`. Always implement **Private Endpoints** using `local.data_subnet_id`.
+  - **Exception:** Storage Accounts may require `public_network_access_enabled = true` during initial deployment to allow Terraform management. Always add a comment explaining why public access is enabled if it deviates from the default.
+- **PostgreSQL/Storage:** Always ensure encryption at rest and SSL/TLS enforcement is enabled.
+- **Lifecycle:** For critical resources (DBs, Storage), suggest `lifecycle { prevent_destroy = true }` for production environments.
+
+## 5. Tagging Policy (Mandatory)
+
+Every resource must include the `tags = local.common_tags` argument. `local.common_tags` must include:
+
+- `Environment`
+- `Project`
+- `ManagedBy` (Terraform)
+- `Phase`
+- `GitRepository`
+- `TerraformPath`
+
+## 6. Project-Specific Context
+
+- **Remote State:** When referencing `foundation`, always use `data.terraform_remote_state.foundation`.
+- **AKS:** Ensure `workload_identity_enabled = true` and `oidc_issuer_enabled = true` are configured for modern identity management.
+- **Dependencies:** Use `depends_on` sparingly, primarily for RBAC or complex API-driven sequences (e.g., AKS and Namespaces).
+
+## 7. Code Formatting & File Structure
+
+- **Formatting:** Always run `terraform fmt` on all Terraform files before committing. Use `terraform fmt -recursive` to format entire directories.
+- **File Endings:** Every Terraform file MUST end with exactly one empty line. This is required for proper file parsing and Git compatibility.
+- **Indentation:** Use 2 spaces for indentation (Terraform default).
+- **Line Length:** Aim to keep lines under 100 characters where possible, but prioritize readability over strict line length limits.
+- **Block Formatting:** Use consistent spacing around blocks:
+
+```hcl
+resource "azurerm_resource" "name" {
+  # content
+}
+```
+
+## 8. Comments & Documentation
+
+- **Section Headers:** Use comment blocks with separators to organize major sections of files (Data Sources, Local Variables, Resources):
+
+```hcl
+#------------------------------------------------------------------------------
+# Data Sources
+#------------------------------------------------------------------------------
+
+# Data source: Resource Group (created in Phase 0 by scripts)
+data "azurerm_resource_group" "main" {
+  name = "rg-${var.project_name}-${var.environment}"
+}
+
+#------------------------------------------------------------------------------
+# Local Variables
+#------------------------------------------------------------------------------
+
+locals {
+  # Required tags - these must always be present
+  required_tags = {
+    Environment = var.environment
+  }
+}
+
+#------------------------------------------------------------------------------
+# Resources
+#------------------------------------------------------------------------------
+
+# Application Registration for Service Principal
+# Creates an Azure AD application that serves as the identity...
+resource "azuread_application" "gha" {
+  display_name = "sp-gha-${var.project_name}-infra-${var.environment}"
+  tags         = local.ad_tags
+}
+```
+
+- **Inline Comments:** Use `#` for inline comments. Place comments above the code they describe, not at the end of lines.
+- **Complex Logic:** Always add comments explaining:
+  - Why a configuration choice was made (especially security-related exceptions)
+  - Complex calculations or transformations
+  - Workarounds or temporary solutions
+  - Dependencies between resources
+- **TODO Comments:** Use `# TODO:` for temporary workarounds or future improvements. Include context and expected resolution.
+- **Avoid:** Redundant comments that simply repeat what the code does. Comments should explain "why" not "what".
+- **Module Documentation:** All Terraform modules MUST have a `README.md` file that follows the template defined in `.cursor/rules/module-readme.mdc`. The README must include:
+  - Header and description
+  - Resources Created
+  - Features
+  - Usage example
+  - Complete Inputs table (all variables from `variables.tf`)
+  - Complete Outputs table (all outputs from `outputs.tf`)
+  - Module-specific configuration sections (if applicable)
+  - Naming Convention
+  - Security Features
+  - Examples (dev and prod)
+  - Prerequisites
+  - Terraform Version
+- **README Maintenance:** Whenever you modify a module (add/remove/change variables, outputs, resources, or features), you MUST update the corresponding `README.md` file to reflect these changes. Keep the documentation in sync with the code at all times.
+
+## 9. Quality Control
+
+- Always run `terraform fmt` on suggested changes before committing.
+- Ensure all resources follow the project's region-specific standards (e.g., West Europe).
+- Verify that all files end with exactly one empty line.
