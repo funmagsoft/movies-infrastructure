@@ -1,3 +1,5 @@
+data "azurerm_client_config" "current" {}
+
 locals {
   env_short_map = {
     dev   = "d"

@@ -14,14 +14,14 @@ resource "azurerm_kubernetes_cluster" "this" {
   }
 
   default_node_pool {
-    name                = "system"
-    vm_size             = var.system_node_vm_size
-    vnet_subnet_id      = var.subnet_id
-    enable_auto_scaling = true
-    min_count           = var.system_node_min
-    max_count           = var.system_node_max
-    os_disk_size_gb     = 30
-    type                = "VirtualMachineScaleSets"
+    name                 = "system"
+    vm_size              = var.system_node_vm_size
+    vnet_subnet_id       = var.subnet_id
+    auto_scaling_enabled = true
+    min_count            = var.system_node_min
+    max_count            = var.system_node_max
+    os_disk_size_gb      = 30
+    type                 = "VirtualMachineScaleSets"
     orchestrator_version = var.kubernetes_version
   }
 
@@ -39,7 +39,6 @@ resource "azurerm_kubernetes_cluster" "this" {
   dynamic "azure_active_directory_role_based_access_control" {
     for_each = var.enable_aad_rbac ? [1] : []
     content {
-      managed                = true
       azure_rbac_enabled     = true
       admin_group_object_ids = var.aad_admin_group_object_ids
     }

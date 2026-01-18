@@ -130,6 +130,24 @@ oraz backend:
 - `env/prod/backend.hcl`
 - (opcjonalnie) `env/global/backend.hcl`
 
+#### Pliki tfvars - bezpieczeństwo
+
+Pliki `env/**/platform/*.tfvars` i `env/**/apps/*.tfvars` są **śledzone w git**, ponieważ zawierają tylko konfigurację infrastruktury (flagi, nazwy zasobów, CIDR ranges, konfigurację node pools).
+
+**⚠️ WAŻNE: NIGDY nie dodawaj do plików tfvars:**
+- Hasła, klucze API, tokeny dostępu
+- Connection strings z credentials
+- Private keys, certificates
+- Inne wrażliwe dane (secrets)
+
+**Dla wrażliwych danych używaj:**
+- Azure Key Vault (moduł `modules/azure/keyvault`)
+- Environment variables w CI/CD pipelines
+- Terraform variables z `sensitive = true` przekazywane przez zmienne środowiskowe
+- Azure Key Vault secrets jako data sources w kodzie Terraform
+
+Pliki `backend.hcl` są generowane przez `./scripts/generate-backends.sh` i **nie są śledzone** w git (ignorowane przez `.gitignore`).
+
 ## 3. Wymagania wstępne
 
 ### 3.1 Narzędzia

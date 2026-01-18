@@ -21,14 +21,14 @@ This stack creates an Azure Storage Account + containers for Terraform state.
 
 ## One-time procedure
 
-1) Login to Azure:
+1. Login to Azure:
 
 ```bash
 az login
 az account set --subscription <SUBSCRIPTION_ID>
 ```
 
-2) Apply bootstrap:
+1. Apply bootstrap:
 
 ```bash
 cd stacks/00-bootstrap/backend-local
@@ -36,7 +36,7 @@ terraform init
 terraform apply
 ```
 
-3) Generate backend configs:
+1. Generate backend configs:
 
 ```bash
 cd ../../..
@@ -53,6 +53,7 @@ Recommended identities:
 - `sp-tf-prod-fms-movies` → `tfstate-prod`
 
 Each SP:
+
 - has a Federated Identity Credential (FIC) bound to GitHub Environment (`global|dev|stage|prod`)
 - has `Storage Blob Data Contributor` on its own state container
 - has `Owner` on its own environment RG (and enough rights to create role assignments)

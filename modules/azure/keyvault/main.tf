@@ -15,7 +15,7 @@ resource "azurerm_key_vault" "this" {
   tags = var.tags
 
   lifecycle {
-    prevent_destroy = var.enable_purge_protection
+    prevent_destroy = true
     ignore_changes  = [tags, purge_protection_enabled]
   }
 }

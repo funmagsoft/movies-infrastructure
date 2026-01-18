@@ -15,13 +15,19 @@ FAILED=0
 PASSED=0
 
 # Test all modules
-for module_dir in modules/*/; do
-  module_name=$(basename "${module_dir}")
+# Find all module directories by looking for main.tf or versions.tf files
+# This includes modules/azure/*/ and modules/standards/
+mapfile -t module_dirs < <(find modules -name "main.tf" -o -name "versions.tf" 2>/dev/null | sed 's|/[^/]*$||' | sort -u)
+
+for module_dir in "${module_dirs[@]}"; do
+  # Get relative path from modules/ for display
+  module_path="${module_dir#modules/}"
   echo ""
-  echo "📦 Testing module: ${module_name}"
+  echo "📦 Testing module: ${module_path}"
   
-  if [ ! -f "${module_dir}main.tf" ] && [ ! -f "${module_dir}*.tf" ]; then
-    echo "  ⚠️  Skipping ${module_name} - no .tf files found"
+  # Check if there are any .tf files
+  if ! ls "${module_dir}"/*.tf > /dev/null 2>&1; then
+    echo "  ⚠️  Skipping ${module_path} - no .tf files found"
     continue
   fi
 
@@ -29,17 +35,17 @@ for module_dir in modules/*/; do
   
   if terraform init -backend=false > /dev/null 2>&1; then
     if terraform validate > /dev/null 2>&1; then
-      echo "  ✅ ${module_name} - validation passed"
-      ((PASSED++))
+      echo "  ✅ ${module_path} - validation passed"
+      ((PASSED++)) || true
     else
-      echo "  ❌ ${module_name} - validation failed"
+      echo "  ❌ ${module_path} - validation failed"
       terraform validate
-      ((FAILED++))
+      ((FAILED++)) || true
     fi
   else
-    echo "  ❌ ${module_name} - init failed"
+    echo "  ❌ ${module_path} - init failed"
     terraform init -backend=false
-    ((FAILED++))
+    ((FAILED++)) || true
   fi
   
   cd "${REPO_ROOT}"
